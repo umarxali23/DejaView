@@ -35,7 +35,7 @@ def frame_level_hashes(video_path, interval_sec=1, max_frames=10):
     return frame_hashes
 
 
-def frame_vote_similarity(query_hashes, candidate_hashes, frame_threshold=5):
+def frame_vote_similarity(query_hashes, candidate_hashes, frame_threshold=3):
     if len(query_hashes) == 0 or len(candidate_hashes) == 0:
         return 0
 
@@ -108,9 +108,9 @@ def save_similarity(query, matched_video, distance, label):
 
 # ---------- HELPERS ----------
 def classify_distance(distance):
-    if distance <= 5:
+    if distance <= 3:
         return "Duplicate"
-    elif distance <= 15:
+    elif distance <= 8:
         return "Near-Duplicate"
     else:
         return "Different"
