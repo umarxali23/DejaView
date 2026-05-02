@@ -110,7 +110,7 @@ def save_similarity(query, matched_video, distance, label):
 def classify_distance(distance):
     if distance <= 3:
         return "Duplicate"
-    elif distance <= 8:
+    elif distance <= 5:
         return "Near-Duplicate"
     else:
         return "Different"
