@@ -19,6 +19,40 @@ def process_video(video_path):
     return fingerprint
 
 
+def frame_level_hashes(video_path, interval_sec=1, max_frames=10):
+    frames = extract_frames(video_path, interval_sec=interval_sec)
+
+    # limit frames (important improvement)
+    frames = frames[:max_frames]
+
+    frame_hashes = []
+
+    for frame in frames:
+        features = video_feature_vector([frame])
+        fingerprint = simhash(features)
+        frame_hashes.append(fingerprint)
+
+    return frame_hashes
+
+
+def frame_vote_similarity(query_hashes, candidate_hashes, frame_threshold=5):
+    if len(query_hashes) == 0 or len(candidate_hashes) == 0:
+        return 0
+
+    matched_frames = 0
+
+    for query_hash in query_hashes:
+        for candidate_hash in candidate_hashes:
+            distance = hamming_distance(query_hash, candidate_hash)
+
+            if distance <= frame_threshold:
+                matched_frames += 1
+                break
+
+    similarity_score = matched_frames / len(query_hashes)
+    return similarity_score
+
+
 # ---------- DB ----------
 def save_to_db(video, path, fingerprint):
     conn = get_connection()
@@ -80,6 +114,15 @@ def classify_distance(distance):
         return "Near-Duplicate"
     else:
         return "Different"
+
+
+def classify_frame_similarity(score):
+    if score >= 0.80:
+        return "Strong Match"
+    elif score >= 0.50:
+        return "Possible Near-Duplicate"
+    else:
+        return "Weak Match"
 
 
 def ensure_results_folder():
@@ -164,15 +207,67 @@ def main():
         for video, distance, label in results:
             print(f"{video} -> {distance} ({label})")
 
+    # -------- FRAME-LEVEL VERIFICATION --------
+    frame_results = []
+
+    if results:
+        print("\n--- Frame-Level Verification ---")
+
+        query_path = os.path.join(DATASET_PATH, query_video)
+        query_frame_hashes = frame_level_hashes(query_path)
+
+        for matched_video, distance, label in results[:3]:
+            matched_path = os.path.join(DATASET_PATH, matched_video)
+            matched_frame_hashes = frame_level_hashes(matched_path)
+
+            frame_score = frame_vote_similarity(
+                query_frame_hashes,
+                matched_frame_hashes,
+                frame_threshold=5
+            )
+
+            frame_label = classify_frame_similarity(frame_score)
+
+            frame_results.append(
+                (query_video, matched_video, distance, label, frame_score, frame_label)
+            )
+
+            print(
+                f"{matched_video} -> "
+                f"Global Distance: {distance}, "
+                f"Frame Similarity: {frame_score:.2f} ({frame_label})"
+            )
+
     # -------- SAVE SEARCH RESULTS --------
     res_df = pd.DataFrame(results, columns=["matched_video", "distance", "label"])
     res_df.insert(0, "query_video", query_video)
-
     res_df.to_csv(os.path.join(RESULTS_PATH, "search_results.csv"), index=False)
+
+    # -------- SAVE FRAME VERIFICATION RESULTS --------
+    if frame_results:
+        frame_df = pd.DataFrame(
+            frame_results,
+            columns=[
+                "query_video",
+                "matched_video",
+                "global_distance",
+                "global_label",
+                "frame_similarity_score",
+                "frame_verification_label"
+            ]
+        )
+
+        frame_df.to_csv(
+            os.path.join(RESULTS_PATH, "frame_verification_results.csv"),
+            index=False
+        )
 
     print("\nSearch results saved to:")
     print("- results/search_results.csv")
     print("- PostgreSQL similarity_results table")
+
+    if frame_results:
+        print("- results/frame_verification_results.csv")
 
 
 if __name__ == "__main__":
