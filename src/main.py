@@ -5,10 +5,12 @@ from feature_extractor import video_feature_vector
 from simhash import simhash
 from comparator import hamming_distance
 from lsh_index import LSHIndex
-from db import get_connection
+from db import get_connection, init_db
 
 DATASET_PATH = "data"
 RESULTS_PATH = "results"
+
+init_db()
 
 
 # ---------- PROCESS ----------
@@ -61,9 +63,8 @@ def save_to_db(video, path, fingerprint):
     fp_str = ''.join(map(str, fingerprint))
 
     cur.execute("""
-        INSERT INTO videos (video_name, file_path, fingerprint)
-        VALUES (%s, %s, %s)
-        ON CONFLICT (video_name) DO NOTHING
+        INSERT OR IGNORE INTO videos (video_name, file_path, fingerprint)
+        VALUES (?, ?, ?)
     """, (video, path, fp_str))
 
     conn.commit()
@@ -93,12 +94,9 @@ def save_similarity(query, matched_video, distance, label):
     cur = conn.cursor()
 
     cur.execute("""
-        INSERT INTO similarity_results (query_video, matched_video, distance, label)
-        VALUES (%s, %s, %s, %s)
-        ON CONFLICT (query_video, matched_video)
-        DO UPDATE SET
-            distance = EXCLUDED.distance,
-            label = EXCLUDED.label
+        INSERT OR REPLACE INTO similarity_results
+        (query_video, matched_video, distance, label)
+        VALUES (?, ?, ?, ?)
     """, (query, matched_video, distance, label))
 
     conn.commit()
