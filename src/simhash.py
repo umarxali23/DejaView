@@ -1,7 +1,7 @@
 import hashlib
 import numpy as np
 
-def hash_feature(feature_name, hash_bits=64):
+def hash_feature(feature_name, hash_bits=128):
     h = hashlib.md5(feature_name.encode()).hexdigest()
     bin_str = bin(int(h, 16))[2:].zfill(hash_bits)
     return [int(b) for b in bin_str[:hash_bits]]
