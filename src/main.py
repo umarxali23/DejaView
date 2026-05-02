@@ -1,6 +1,6 @@
 import os
 import pandas as pd
-from video_utils import extract_frames
+from video_utils import extract_frames, extract_keyframes
 from feature_extractor import video_feature_vector
 from simhash import simhash
 from comparator import hamming_distance
@@ -13,7 +13,7 @@ RESULTS_PATH = "results"
 
 # ---------- PROCESS ----------
 def process_video(video_path):
-    frames = extract_frames(video_path)
+    frames = extract_keyframes(video_path)
     features = video_feature_vector(frames)
     fingerprint = simhash(features)
     return fingerprint
@@ -183,7 +183,7 @@ def main():
     print(f"\nQuery Video: {query_video}")
 
     query_fp = fingerprints[query_video]
-    candidates = index.query(query_fp)
+    candidates = index.query_multiprobe(query_fp)
 
     print(f"\nTotal videos in database: {len(fingerprints)}")
     print(f"Candidates found by LSH: {len(candidates)}")
