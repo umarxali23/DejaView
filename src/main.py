@@ -113,7 +113,7 @@ def classify_distance(distance):
     elif distance <= 5:
         return "Near-Duplicate"
     else:
-        return "Different"
+        return "Unrelated"
 
 
 def classify_frame_similarity(score):
