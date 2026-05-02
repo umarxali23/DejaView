@@ -1,6 +1,6 @@
 import os
 import pandas as pd
-from video_utils import extract_frames
+from video_utils import extract_frames, extract_keyframes
 from feature_extractor import video_feature_vector
 from simhash import simhash
 from comparator import hamming_distance
@@ -13,7 +13,7 @@ RESULTS_PATH = "results"
 
 # ---------- PROCESS ----------
 def process_video(video_path):
-    frames = extract_frames(video_path)
+    frames = extract_keyframes(video_path)
     features = video_feature_vector(frames)
     fingerprint = simhash(features)
     return fingerprint
@@ -35,7 +35,7 @@ def frame_level_hashes(video_path, interval_sec=1, max_frames=10):
     return frame_hashes
 
 
-def frame_vote_similarity(query_hashes, candidate_hashes, frame_threshold=5):
+def frame_vote_similarity(query_hashes, candidate_hashes, frame_threshold=3):
     if len(query_hashes) == 0 or len(candidate_hashes) == 0:
         return 0
 
@@ -108,12 +108,12 @@ def save_similarity(query, matched_video, distance, label):
 
 # ---------- HELPERS ----------
 def classify_distance(distance):
-    if distance <= 5:
+    if distance <= 3:
         return "Duplicate"
-    elif distance <= 15:
+    elif distance <= 5:
         return "Near-Duplicate"
     else:
-        return "Different"
+        return "Unrelated"
 
 
 def classify_frame_similarity(score):
@@ -183,7 +183,7 @@ def main():
     print(f"\nQuery Video: {query_video}")
 
     query_fp = fingerprints[query_video]
-    candidates = index.query(query_fp)
+    candidates = index.query_multiprobe(query_fp)
 
     print(f"\nTotal videos in database: {len(fingerprints)}")
     print(f"Candidates found by LSH: {len(candidates)}")
