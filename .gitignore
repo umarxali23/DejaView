@@ -4,12 +4,6 @@
 # Python cache
 __pycache__/
 *.pyc
-*.log
-*.err
-
-# Frontend dependencies/build output
-node_modules/
-dist/
 
 # Data files
 data/
@@ -20,3 +14,6 @@ results/
 # OS files
 .DS_Store
 Thumbs.db
+
+dejaview.db
+*.db
