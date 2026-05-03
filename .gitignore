@@ -1,0 +1,22 @@
+# Virtual environment
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.log
+*.err
+
+# Frontend dependencies/build output
+node_modules/
+dist/
+
+# Data files
+data/
+
+# Results
+results/
+
+# OS files
+.DS_Store
+Thumbs.db
