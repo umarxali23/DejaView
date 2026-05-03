@@ -6,11 +6,10 @@ import {
   Fingerprint,
   Gauge,
   Play,
-  Radar,
   RefreshCw,
   ScanSearch,
   Server,
-  Sparkles,
+  Upload,
   Video,
   Zap,
 } from "lucide-react";
@@ -24,54 +23,37 @@ const labelTone = {
   Unrelated: "cool",
 };
 
-const radarDotPositions = [
-  { left: "24%", top: "34%" },
-  { left: "67%", top: "28%" },
-  { left: "76%", top: "66%" },
-  { left: "38%", top: "72%" },
-  { left: "52%", top: "48%" },
-];
-
-const particlePositions = [
-  { left: "9%", top: "18%" },
-  { left: "24%", top: "72%" },
-  { left: "37%", top: "31%" },
-  { left: "48%", top: "86%" },
-  { left: "58%", top: "16%" },
-  { left: "69%", top: "58%" },
-  { left: "78%", top: "35%" },
-  { left: "86%", top: "80%" },
-  { left: "14%", top: "48%" },
-  { left: "92%", top: "22%" },
-];
-
 function App() {
   const [videos, setVideos] = useState([]);
   const [files, setFiles] = useState([]);
   const [queryVideo, setQueryVideo] = useState("");
   const [search, setSearch] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [indexing, setIndexing] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
+  const [uploadMessage, setUploadMessage] = useState("");
 
   const availableVideos = useMemo(
     () => videos.filter((video) => video.available),
     [videos],
   );
 
-  const duplicateCount = search?.results?.filter(
-    (result) => result.label === "Duplicate",
-  ).length;
+  const verifiedResults = search?.results || [];
+  const stageOneResults = search?.stageOneResults || [];
+  const topMatch = verifiedResults[0];
 
   async function request(path, options) {
     const response = await fetch(`${API_BASE}${path}`, {
       headers: { "Content-Type": "application/json" },
       ...options,
     });
+
     const data = await response.json();
+
     if (!response.ok) {
       throw new Error(data.error || "Request failed");
     }
+
     return data;
   }
 
@@ -85,15 +67,18 @@ function App() {
 
   async function searchVideo(name = queryVideo) {
     if (!name) return;
+
     setLoading(true);
     setError("");
+    setUploadMessage("");
+
     try {
-      setSearch(
-        await request("/api/search", {
-          method: "POST",
-          body: JSON.stringify({ queryVideo: name }),
-        }),
-      );
+      const data = await request("/api/search", {
+        method: "POST",
+        body: JSON.stringify({ queryVideo: name }),
+      });
+
+      setSearch(data);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -101,16 +86,44 @@ function App() {
     }
   }
 
-  async function indexDataset() {
-    setIndexing(true);
+  async function uploadVideo(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.toLowerCase().endsWith(".mp4")) {
+      setError("Only .mp4 videos are supported.");
+      return;
+    }
+
+    setUploading(true);
     setError("");
+    setUploadMessage("");
+
     try {
-      await request("/api/index", { method: "POST" });
-      await loadVideos();
+      const formData = new FormData();
+      formData.append("video", file);
+
+      const response = await fetch(`${API_BASE}/api/upload`, {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Upload failed");
+      }
+
+      setVideos(data.videos);
+      setFiles(data.files);
+      setQueryVideo(data.uploaded);
+      setSearch(null);
+      setUploadMessage(`${data.uploaded} uploaded and indexed successfully.`);
     } catch (err) {
       setError(err.message);
     } finally {
-      setIndexing(false);
+      setUploading(false);
+      event.target.value = "";
     }
   }
 
@@ -119,61 +132,47 @@ function App() {
   }, []);
 
   const selectedVideo = videos.find((video) => video.name === queryVideo);
-  const topMatch = search?.results?.[0];
 
   return (
     <main className="app-shell">
-      <div className="ambient-scene" aria-hidden="true">
-        <div className="scanline-field" />
-        <div className="signal-particles">
-          {particlePositions.map((particle, index) => (
-            <span
-              key={index}
-              style={{
-                "--particle-index": index,
-                left: particle.left,
-                top: particle.top,
-              }}
-            />
-          ))}
-        </div>
-        <div className="wave-layer wave-one" />
-        <div className="wave-layer wave-two" />
-      </div>
-
       <section className="hero-band">
         <div className="hero-copy">
-          <div className="brand-mark">
-            <Radar size={20} />
-            <span>DejaView</span>
-          </div>
+    
+
           <h1>DejaView</h1>
+
           <p>
-            Find duplicate and near-duplicate videos by comparing visual
-            fingerprints from your local dataset.
+            A video similarity system using SimHash, LSH candidate retrieval,
+            and frame-level verification.
           </p>
+
           <div className="hero-actions">
             <button className="primary-button" onClick={() => searchVideo()}>
               {loading ? <RefreshCw className="spin" /> : <ScanSearch />}
               <span>{loading ? "Scanning" : "Run scan"}</span>
             </button>
-            <button className="ghost-button" onClick={indexDataset}>
-              {indexing ? <RefreshCw className="spin" /> : <Database />}
-              <span>{indexing ? "Indexing" : "Index dataset"}</span>
-            </button>
+
+            <label className="upload-button">
+              {uploading ? <RefreshCw className="spin" /> : <Upload />}
+              <span>{uploading ? "Uploading" : "Upload video"}</span>
+              <input type="file" accept="video/mp4" onChange={uploadVideo} />
+            </label>
           </div>
+
+          {uploadMessage && <div className="success-strip">{uploadMessage}</div>}
         </div>
 
-        <div className="signal-panel">
-          <div className="orbital-ring">
-            <div className="pulse-core">
-              <Fingerprint size={54} />
-            </div>
+        <div className="signal-panel calm-panel">
+          <div className="hero-card-title">
+            <Fingerprint size={42} />
+            <h2>DataView</h2>
+            <p></p>
           </div>
+
           <div className="signal-readouts">
             <Metric icon={<Video />} label="Fingerprints" value={videos.length} />
             <Metric icon={<Play />} label="Playable files" value={availableVideos.length} />
-            <Metric icon={<Zap />} label="Matches" value={search?.results?.length ?? 0} />
+            <Metric icon={<Zap />} label="Verified matches" value={verifiedResults.length} />
           </div>
         </div>
       </section>
@@ -190,7 +189,7 @@ function App() {
           <div className="panel-heading">
             <div>
               <span className="eyebrow">Query video</span>
-              <h2>Choose a fingerprint</h2>
+              <h2>Choose or upload a video</h2>
             </div>
             <Activity />
           </div>
@@ -208,7 +207,6 @@ function App() {
               </option>
             ))}
           </select>
-          <div className="select-glow" />
 
           {selectedVideo?.available ? (
             <video
@@ -223,8 +221,7 @@ function App() {
             </div>
           )}
 
-          <div className="fingerprint-strip" aria-label="fingerprint bits">
-            <div className="fingerprint-scan" />
+          <div className="fingerprint-strip full-fingerprint" aria-label="fingerprint bits">
             {(selectedVideo?.fingerprint || "").split("").map((bit, index) => (
               <span key={`${bit}-${index}`} className={bit === "1" ? "on" : ""} />
             ))}
@@ -234,53 +231,49 @@ function App() {
         <div className="panel results-panel">
           <div className="panel-heading">
             <div>
-              <span className="eyebrow">LSH results</span>
-              <h2>Similarity radar</h2>
+              <span className="eyebrow">Final result</span>
+              <h2>Verified matches</h2>
             </div>
             <Gauge />
           </div>
 
-          <div className="summary-grid">
+          <div className="summary-grid two-metrics">
             <Metric icon={<Database />} label="Database" value={search?.totalVideos ?? videos.length} />
-            <Metric icon={<Radar />} label="Candidates" value={search?.candidates ?? 0} />
-            <Metric icon={<Sparkles />} label="Duplicates" value={duplicateCount ?? 0} />
+            <Metric icon={<ScanSearch />} label="Raw LSH candidates" value={search?.rawCandidates ?? 0} />
           </div>
 
-          <div className="match-stage">
-            <div className={`radar-surface ${search ? "active" : ""}`}>
-              {radarDotPositions.map((dot, index) => (
-                <span
-                  className="radar-dot"
-                  key={index}
-                  style={{
-                    left: dot.left,
-                    top: dot.top,
-                    animationDelay: `${index * 180}ms`,
-                  }}
-                />
-              ))}
-            </div>
+          <div className="match-stage clean-stage">
             {topMatch ? (
               <>
                 <div className="best-match-copy">
-                  <span className="eyebrow">Best match</span>
+                  <span className="eyebrow">Best verified match</span>
                   <h3>{topMatch.matchedVideo}</h3>
+                  <p>
+                    Frame similarity: {topMatch.frameSimilarity} | Hamming distance:{" "}
+                    {topMatch.distance}
+                  </p>
                 </div>
+
                 <div className={`score-ring ${labelTone[topMatch.label]}`}>
                   <span>{topMatch.confidence}%</span>
-                  <small>{topMatch.label}</small>
+                  <small>{topMatch.frameLabel}</small>
                 </div>
               </>
+            ) : search ? (
+              <div className="empty-state">
+                <ScanSearch size={34} />
+                <span>No duplicates or near-duplicates found.</span>
+              </div>
             ) : (
               <div className="empty-state">
                 <ScanSearch size={34} />
-                <span>Run a scan to light up candidate matches.</span>
+                <span>Run a scan to find verified matches.</span>
               </div>
             )}
           </div>
 
           <div className="results-list">
-            {(search?.results || []).map((result, index) => (
+            {verifiedResults.map((result, index) => (
               <article
                 className="match-row"
                 key={result.matchedVideo}
@@ -290,10 +283,15 @@ function App() {
                   className={`confidence-bar ${labelTone[result.label]}`}
                   style={{ "--confidence": `${result.confidence}%` }}
                 />
+
                 <div>
                   <h3>{result.matchedVideo}</h3>
-                  <p>Hamming distance {result.distance}</p>
+                  <p>
+                    Stage 1 distance: {result.distance} | Stage 2 frame score:{" "}
+                    {result.frameSimilarity}
+                  </p>
                 </div>
+
                 <span className={`pill ${labelTone[result.label]}`}>
                   {result.label}
                 </span>
@@ -303,11 +301,75 @@ function App() {
         </div>
       </section>
 
+      {search && (
+        <section className="process-band">
+          <div className="section-title">
+            <span className="eyebrow">Detection process</span>
+            <h2>Two-stage matching pipeline</h2>
+          </div>
+
+          <div className="process-grid">
+            <div className="panel process-panel">
+              <span className="eyebrow">Stage 1</span>
+              <h3>Global SimHash + LSH</h3>
+              <p>
+                LSH retrieved {search.rawCandidates} raw candidates. Hamming
+                distance was then used to filter possible duplicates.
+              </p>
+
+              <div className="results-list compact-list">
+                {stageOneResults.slice(0, 6).map((result) => (
+                  <article className="match-row" key={`stage-one-${result.matchedVideo}`}>
+                    <div>
+                      <h3>{result.matchedVideo}</h3>
+                      <p>Distance {result.distance}</p>
+                    </div>
+                    <span className={`pill ${labelTone[result.label]}`}>
+                      {result.label}
+                    </span>
+                  </article>
+                ))}
+              </div>
+            </div>
+
+            <div className="panel process-panel">
+              <span className="eyebrow">Stage 2</span>
+              <h3>Frame-level verification</h3>
+              <p>
+                Final results are kept only when frame-level voting confirms
+                visual similarity.
+              </p>
+
+              <div className="results-list compact-list">
+                {verifiedResults.length ? (
+                  verifiedResults.map((result) => (
+                    <article className="match-row" key={`verified-${result.matchedVideo}`}>
+                      <div>
+                        <h3>{result.matchedVideo}</h3>
+                        <p>Frame similarity {result.frameSimilarity}</p>
+                      </div>
+                      <span className={`pill ${labelTone[result.label]}`}>
+                        {result.frameLabel}
+                      </span>
+                    </article>
+                  ))
+                ) : (
+                  <div className="empty-state small-empty">
+                    No verified duplicate matches.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
       <section className="library-band">
         <div className="section-title">
           <span className="eyebrow">Dataset library</span>
           <h2>{files.length} MP4 files found on disk</h2>
         </div>
+
         <div className="video-grid">
           {videos.map((video) => (
             <article className="video-card" key={video.name}>
@@ -317,11 +379,16 @@ function App() {
                   {video.available ? "Live" : "Missing"}
                 </span>
               </div>
+
               <h3>{video.name}</h3>
               <p>{video.fingerprintBits} bit SimHash fingerprint</p>
-              <div className="mini-fingerprint" aria-hidden="true">
-                {(video.fingerprint || "").slice(0, 32).split("").map((bit, index) => (
-                  <span key={`${video.name}-${index}`} className={bit === "1" ? "on" : ""} />
+
+              <div className="mini-fingerprint full-mini-fingerprint" aria-hidden="true">
+                {(video.fingerprint || "").split("").map((bit, index) => (
+                  <span
+                    key={`${video.name}-${index}`}
+                    className={bit === "1" ? "on" : ""}
+                  />
                 ))}
               </div>
             </article>
